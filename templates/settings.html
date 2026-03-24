@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% block title %}Settings — Radio Outreach{% endblock %}
+
+{% block content %}
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+
+<h1 class="page-title">Settings</h1>
+
+<!-- ── Gmail Connection ─────────────────────────────────────── -->
+<section class="card">
+  <h2 class="card-title">Gmail Connection</h2>
+
+  {% if authorized %}
+  <div class="auth-status auth-status--connected">
+    <span class="auth-dot auth-dot--on"></span>
+    <strong>Connected</strong> — your Google account is authorized to send emails.
+    <form method="post" action="{{ url_for('disconnect') }}" style="display:inline; margin-left:16px">
+      <button type="submit" class="btn btn--ghost btn--sm">Disconnect</button>
+    </form>
+  </div>
+  {% else %}
+  <div class="auth-status auth-status--disconnected">
+    <span class="auth-dot auth-dot--off"></span>
+    <strong>Not connected.</strong> Authorize your Gmail account to enable sending.
+  </div>
+
+  {% if not creds_exist %}
+  <div class="setup-steps">
+    <p class="setup-title">One-time setup — 3 steps:</p>
+    <ol class="setup-list">
+      <li>
+        Go to the
+        <a href="https://console.cloud.google.com/" target="_blank" class="inline-link">Google Cloud Console ↗</a>,
+        create a project, and enable the <strong>Gmail API</strong>.
+      </li>
+      <li>
+        Under <em>APIs &amp; Services → Credentials</em>, create an
+        <strong>OAuth 2.0 Client ID</strong> (type: <em>Web application</em>).
+        Add <code>http://localhost:5050/oauth2callback</code> as an authorized redirect URI.
+      </li>
+      <li>
+        Download the JSON file and save it as
+        <code>google_credentials.json</code> inside the <code>radio-outreach/</code> folder,
+        then refresh this page.
+      </li>
+    </ol>
+  </div>
+  {% else %}
+  <div style="margin-top:16px">
+    <a href="{{ url_for('authorize') }}" class="btn btn--primary">Connect Google Account</a>
+    <p class="card-hint" style="margin-top:10px">
+      A browser tab will open for you to sign in and grant permission to send emails.
+      You only need to do this once.
+    </p>
+  </div>
+  {% endif %}
+  {% endif %}
+</section>
+
+<!-- ── Email Template ───────────────────────────────────────── -->
+<form method="post" action="{{ url_for('settings') }}" id="template-form">
+
+  <!-- Hidden field that receives the Quill HTML on submit -->
+  <input type="hidden" name="email_body" id="email_body_hidden">
+
+  <section class="card">
+    <h2 class="card-title">Email Template</h2>
+    <p class="card-hint">
+      Use these merge tags anywhere in the subject or body:
+      <button type="button" class="tag-btn" onclick="insertSubjectTag('{{first_name}}')">{{first_name}}</button>
+      <button type="button" class="tag-btn" onclick="insertSubjectTag('{{last_name}}')">{{last_name}}</button>
+      <button type="button" class="tag-btn" onclick="insertSubjectTag('{{name}}')">{{name}}</button>
+      <button type="button" class="tag-btn" onclick="insertSubjectTag('{{station}}')">{{station}}</button>
+      <button type="button" class="tag-btn" onclick="insertSubjectTag('{{school}}')">{{school}}</button>
+      <span class="tag-hint">— click to insert into the focused field, or use the body toolbar below</span>
+    </p>
+
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Subject</label>
+      <input type="text" name="email_subject" id="email_subject"
+             value="{{ s.email_subject }}" class="input"
+             oninput="updatePreview()">
+    </div>
+
+    <div class="template-editor">
+      <!-- Quill editor pane -->
+      <div class="editor-pane">
+        <div class="pane-label">Body</div>
+
+        <!-- Quill toolbar -->
+        <div id="quill-toolbar">
+          <span class="ql-formats">
+            <button class="ql-bold"></button>
+            <button class="ql-italic"></button>
+            <button class="ql-underline"></button>
+          </span>
+          <span class="ql-formats">
+            <button class="ql-link"></button>
+          </span>
+          <span class="ql-formats">
+            <button class="ql-list" value="ordered"></button>
+            <button class="ql-list" value="bullet"></button>
+          </span>
+          <span class="ql-formats">
+            <button class="ql-clean"></button>
+          </span>
+          <!-- Merge tag buttons inside toolbar -->
+          <span class="ql-formats tag-formats">
+            <span class="tag-bar-label">Insert:</span>
+            <button type="button" class="tag-btn" onclick="insertBodyTag('{{first_name}}')">{{first_name}}</button>
+            <button type="button" class="tag-btn" onclick="insertBodyTag('{{last_name}}')">{{last_name}}</button>
+            <button type="button" class="tag-btn" onclick="insertBodyTag('{{name}}')">{{name}}</button>
+            <button type="button" class="tag-btn" onclick="insertBodyTag('{{station}}')">{{station}}</button>
+            <button type="button" class="tag-btn" onclick="insertBodyTag('{{school}}')">{{school}}</button>
+          </span>
+        </div>
+
+        <div id="quill-editor"></div>
+      </div>
+
+      <!-- Live preview -->
+      <div class="editor-pane">
+        <div class="pane-label">
+          Preview
+          <span class="preview-note">using sample data</span>
+        </div>
+        <div class="email-preview-wrap">
+          <div class="email-field">
+            <span class="email-field-label">Subject:</span>
+            <span id="preview-subject"></span>
+          </div>
+          <div class="email-body quill-preview" id="preview-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn--primary">Save Template</button>
+      <button type="button" class="btn btn--ghost" onclick="submitTestEmail()">✉ Send Test Email</button>
+      <span class="test-recipient-wrap">
+        <span class="test-recipient-label">to:</span>
+        <input type="email" id="test_recipient_input" class="input input--inline"
+               placeholder="your@email.com (leave blank = your Gmail)">
+      </span>
+    </div>
+  </section>
+
+  <!-- ── Column Mapping ───────────────────────────────────────── -->
+  <section class="card">
+    <h2 class="card-title">PDF Column Mapping</h2>
+    <p class="card-hint">
+      Map your spreadsheet app fields to the exact column headers in the PDF.
+      <button type="button" class="btn btn--ghost btn--sm" id="load-cols-btn">Load columns from PDF</button>
+    </p>
+
+    <div id="col-preview" class="col-preview hidden"></div>
+
+    <div class="form-grid">
+      {% set field_labels = [
+        ('col_station_name', 'Station Name'),
+        ('col_contact_name', 'Contact / Full Name'),
+        ('col_email',        'Email'),
+        ('col_school',       'School'),
+        ('col_city',         'City'),
+        ('col_state',        'State'),
+        ('col_genre',        'Genre / Format'),
+        ('col_notes',        'Notes (optional)'),
+      ] %}
+      {% for field, label in field_labels %}
+      <div class="form-group">
+        <label>{{ label }}</label>
+        <input type="text" name="{{ field }}" id="{{ field }}"
+               value="{{ s[field] }}" class="input col-map-input"
+               placeholder="PDF column header…">
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn--primary">Save Settings</button>
+    </div>
+  </section>
+
+</form>
+
+<!-- Send-test form lives OUTSIDE the main form to avoid nesting issues -->
+<form method="post" action="{{ url_for('send_test') }}" id="send-test-form">
+  <input type="hidden" name="email_body_test" id="email_body_test">
+  <input type="hidden" name="test_recipient" id="test_recipient">
+</form>
+
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+<script>
+// ── Sample data for live preview ────────────────────────────
+const SAMPLE = {
+  first_name: "Alex",
+  last_name:  "Rivera",
+  name:       "Alex Rivera",
+  station:    "WKSU",
+  school:     "Kent State University",
+};
+
+function renderTags(html) {
+  let result = html
+    .replace(/\{\{first_name\}\}/g, SAMPLE.first_name)
+    .replace(/\{\{last_name\}\}/g,  SAMPLE.last_name)
+    .replace(/\{\{name\}\}/g,       SAMPLE.name)
+    .replace(/\{\{station\}\}/g,    SAMPLE.station)
+    .replace(/\{\{school\}\}/g,     SAMPLE.school);
+  result = result.replace(/ {2,}/g, ' ');
+  result = result.replace(/ ([,\.!?])/g, '$1');
+  return result;
+}
+
+function updatePreview() {
+  const subject  = document.getElementById('email_subject').value;
+  const bodyHtml = quill.root.innerHTML;
+
+  document.getElementById('preview-subject').textContent = renderTags(subject);
+  // Body is already HTML from Quill — just render it with tags swapped
+  document.getElementById('preview-body').innerHTML = renderTags(bodyHtml);
+}
+
+// ── Insert tag into subject input ────────────────────────────
+function insertSubjectTag(tag) {
+  const el = document.getElementById('email_subject');
+  el.focus();
+  const start = el.selectionStart;
+  const end   = el.selectionEnd;
+  el.value = el.value.slice(0, start) + tag + el.value.slice(end);
+  el.selectionStart = el.selectionEnd = start + tag.length;
+  updatePreview();
+}
+
+// ── Insert tag into Quill at cursor ─────────────────────────
+function insertBodyTag(tag) {
+  quill.focus();
+  const range = quill.getSelection(true);
+  quill.insertText(range ? range.index : quill.getLength(), tag, 'user');
+  updatePreview();
+}
+
+// ── Quill setup ──────────────────────────────────────────────
+const savedBody = {{ s.email_body | tojson }};
+
+const quill = new Quill('#quill-editor', {
+  theme: 'snow',
+  modules: { toolbar: '#quill-toolbar' },
+  placeholder: 'Write your email here…',
+});
+
+// Load saved HTML (or plain text) into Quill
+if (savedBody) {
+  // If it looks like HTML, paste it directly; otherwise treat as plain text
+  if (savedBody.trim().startsWith('<')) {
+    quill.root.innerHTML = savedBody;
+  } else {
+    // Convert legacy plain text: newlines → Quill paragraphs
+    savedBody.split('\n').forEach((line, i) => {
+      const idx = quill.getLength() - 1;
+      if (i > 0) quill.insertText(idx, '\n', 'user');
+      quill.insertText(i === 0 ? 0 : quill.getLength() - 1, line, 'user');
+    });
+    // Clean up the initial empty paragraph Quill adds
+    quill.setContents(quill.getContents());
+  }
+}
+
+quill.on('text-change', updatePreview);
+
+// ── On submit: copy Quill HTML → hidden input ────────────────
+document.getElementById('template-form').addEventListener('submit', function () {
+  document.getElementById('email_body_hidden').value = quill.root.innerHTML;
+});
+
+// ── Load PDF columns ─────────────────────────────────────────
+document.getElementById('load-cols-btn').addEventListener('click', function () {
+  const btn = this;
+  btn.textContent = 'Loading…';
+  btn.disabled = true;
+
+  fetch('/columns')
+    .then(r => r.json())
+    .then(data => {
+      btn.textContent = 'Load columns from PDF';
+      btn.disabled = false;
+
+      if (data.error) { alert('Error: ' + data.error); return; }
+
+      const preview = document.getElementById('col-preview');
+      preview.classList.remove('hidden');
+      let html = '<p><strong>Columns found in PDF:</strong> ' +
+        data.columns.map(c => `<code>${c}</code>`).join(', ') + '</p>';
+
+      if (data.sample && data.sample.length) {
+        html += '<div style="overflow-x:auto"><table class="table table--sm"><thead><tr>' +
+          data.columns.map(c => `<th>${c}</th>`).join('') +
+          '</tr></thead><tbody>';
+        data.sample.forEach(row => {
+          html += '<tr>' + data.columns.map(c => `<td>${row[c] || ''}</td>`).join('') + '</tr>';
+        });
+        html += '</tbody></table></div>';
+      }
+      preview.innerHTML = html;
+
+      const mappings = {
+        'col_station_name': ['station', 'station name', 'call letters', 'call sign'],
+        'col_contact_name': ['music director', 'contact', 'md', 'program director', 'pd', 'full name', 'name'],
+        'col_email':        ['email', 'e-mail', 'email address'],
+        'col_school':       ['school', 'university', 'college', 'institution'],
+        'col_city':         ['city'],
+        'col_state':        ['state'],
+        'col_genre':        ['format', 'genre', 'music format'],
+        'col_notes':        ['notes', 'comments'],
+      };
+      Object.entries(mappings).forEach(([fieldId, keywords]) => {
+        const input = document.getElementById(fieldId);
+        if (!input || input.value) return;
+        const match = data.columns.find(c =>
+          keywords.some(kw => c.toLowerCase().includes(kw))
+        );
+        if (match) input.value = match;
+      });
+    })
+    .catch(err => {
+      btn.textContent = 'Load columns from PDF';
+      btn.disabled = false;
+      alert('Could not load columns: ' + err);
+    });
+});
+
+// Init preview
+updatePreview();
+
+// ── Send test email ──────────────────────────────────────────
+function submitTestEmail() {
+  document.getElementById('email_body_test').value = quill.root.innerHTML;
+  document.getElementById('test_recipient').value =
+    document.getElementById('test_recipient_input').value.trim();
+  document.getElementById('send-test-form').submit();
+}
+</script>
+
+{% endblock %}

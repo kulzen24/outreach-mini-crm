@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Checklist — Radio Outreach{% endblock %}
+
+{% block content %}
+
+{% if not authorized %}
+<div class="alert alert--warning">
+  Gmail not connected.
+  <a href="{{ url_for('settings') }}" class="inline-link" style="margin-left:6px">Go to Settings to authorize your Google account →</a>
+</div>
+{% endif %}
+
+<!-- Stats bar -->
+<div class="stats-bar">
+  <div class="stat">
+    <span class="stat-number">{{ stats.total }}</span>
+    <span class="stat-label">Total</span>
+  </div>
+  <div class="stat stat--pending">
+    <span class="stat-number">{{ stats.pending }}</span>
+    <span class="stat-label">Pending</span>
+  </div>
+  <div class="stat stat--sent">
+    <span class="stat-number">{{ stats.sent }}</span>
+    <span class="stat-label">Sent</span>
+  </div>
+  <div class="stat stat--skipped">
+    <span class="stat-number">{{ stats.skipped }}</span>
+    <span class="stat-label">Skipped</span>
+  </div>
+  {% if stats.total > 0 %}
+  <div class="stat">
+    <span class="stat-number">{{ ((stats.sent / stats.total) * 100) | round | int }}%</span>
+    <span class="stat-label">Complete</span>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <!-- Filter tabs -->
+    <div class="filter-tabs">
+      {% for tab, label in [('all','All'), ('pending','Pending'), ('sent','Sent'), ('skipped','Skipped')] %}
+      <a href="{{ url_for('index', status=tab, q=search) }}"
+         class="tab {% if current_status == tab %}tab--active{% endif %}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <!-- Search -->
+    <form method="get" action="{{ url_for('index') }}" class="search-form">
+      <input type="hidden" name="status" value="{{ current_status }}">
+      <input type="text" name="q" value="{{ search }}" placeholder="Search stations…" class="search-input">
+      <button type="submit" class="btn btn--ghost btn--sm">Search</button>
+      {% if search %}
+      <a href="{{ url_for('index', status=current_status) }}" class="btn btn--ghost btn--sm">Clear</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <div class="toolbar-right">
+    <form method="post" action="{{ url_for('import_pdf') }}"
+          enctype="multipart/form-data" id="import-form">
+      <label class="btn btn--secondary import-label" title="Import a PDF or XLSX file">
+        ⬇ Import File
+        <input type="file" name="import_file" id="import-file"
+               accept=".pdf,.xlsx" style="display:none"
+               onchange="document.getElementById('import-form').submit()">
+      </label>
+    </form>
+    {% if stats.pending > 0 %}
+    <form method="post" action="{{ url_for('bulk_send') }}"
+          onsubmit="return confirm('Send emails to ALL {{ stats.pending }} pending stations?')">
+      <button type="submit" class="btn btn--primary">✉ Send All Pending ({{ stats.pending }})</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Table -->
+{% if stations %}
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Station</th>
+        <th>Contact / MD</th>
+        <th>Email</th>
+        <th>School</th>
+        <th>City, State</th>
+        <th>Genre</th>
+        <th>Status</th>
+        <th>Sent At</th>
+        <th class="col-actions">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in stations %}
+      <tr class="row row--{{ s.status }}">
+        <td class="td-name">
+          <a href="{{ url_for('station_detail', row_id=s.row_id) }}" class="link-name">{{ s.station_name or '—' }}</a>
+        </td>
+        <td>{{ s.contact_name or '—' }}</td>
+        <td class="td-email">
+          {% if s.email %}
+            <a href="mailto:{{ s.email }}" class="email-link">{{ s.email }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ s.school or '—' }}</td>
+        <td class="td-location">{{ [s.city, s.state] | select | join(', ') or '—' }}</td>
+        <td>{{ s.genre or '—' }}</td>
+        <td>
+          <span class="badge badge--{{ s.status }}">{{ s.status }}</span>
+        </td>
+        <td class="td-sent-at">{{ s.sent_at or '—' }}</td>
+        <td class="col-actions">
+          <div class="action-group">
+            <!-- Send / re-send -->
+            {% if s.status != 'sent' and s.email %}
+            <form method="post" action="{{ url_for('send_one', row_id=s.row_id) }}">
+              <input type="hidden" name="next" value="{{ request.url }}">
+              <button type="submit" class="btn btn--primary btn--xs" title="Send email">✉</button>
+            </form>
+            {% endif %}
+
+            <!-- Skip / un-skip -->
+            {% if s.status == 'pending' %}
+            <form method="post" action="{{ url_for('set_status', row_id=s.row_id) }}">
+              <input type="hidden" name="status" value="skipped">
+              <input type="hidden" name="next" value="{{ request.url }}">
+              <button type="submit" class="btn btn--ghost btn--xs" title="Skip">✕</button>
+            </form>
+            {% elif s.status == 'skipped' %}
+            <form method="post" action="{{ url_for('set_status', row_id=s.row_id) }}">
+              <input type="hidden" name="status" value="pending">
+              <input type="hidden" name="next" value="{{ request.url }}">
+              <button type="submit" class="btn btn--ghost btn--xs" title="Restore to pending">↩</button>
+            </form>
+            {% endif %}
+
+            <!-- Detail -->
+            <a href="{{ url_for('station_detail', row_id=s.row_id) }}" class="btn btn--ghost btn--xs" title="View / Edit">⋯</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  {% if search %}
+    <p>No stations match "<strong>{{ search }}</strong>".</p>
+  {% elif current_status != 'all' %}
+    <p>No stations with status <strong>{{ current_status }}</strong>.</p>
+  {% else %}
+    <p>No stations yet. Click <strong>Import PDF</strong> to get started.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,19 @@
+# Secrets & credentials — never commit these
+.env
+token.json
+google_credentials.json
+settings.json
+
+# Generated data
+outreach.xlsx
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# macOS
+.DS_Store

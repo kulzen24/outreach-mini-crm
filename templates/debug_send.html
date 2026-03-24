@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Test Email Debug — Radio Outreach{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="{{ url_for('settings') }}" class="back-link">← Back to Settings</a>
+</div>
+
+<h1 class="page-title">Test Email — Step by Step</h1>
+
+<div class="card">
+  {% for label, status, detail in steps %}
+  <div class="debug-step debug-step--{{ status }}">
+    <div class="debug-step-header">
+      <span class="debug-icon">{{ '✓' if status == 'ok' else '✗' }}</span>
+      <strong>{{ label }}</strong>
+      <span class="debug-badge debug-badge--{{ status }}">{{ status }}</span>
+    </div>
+    <pre class="debug-detail">{{ detail }}</pre>
+  </div>
+  {% endfor %}
+
+  {% set last = steps[-1] if steps else None %}
+  {% if last and last[1] == 'ok' and 'accepted' in last[2] %}
+  <div class="alert alert--success" style="margin-top:20px">
+    Gmail accepted the message. If it still doesn't arrive after a minute, check:
+    <ul style="margin-top:8px; padding-left:20px; line-height:2">
+      <li>Your <strong>Spam</strong> folder</li>
+      <li>Your <strong>Sent</strong> folder (Gmail sometimes only shows self-sent mail there)</li>
+      <li>The <strong>All Mail</strong> label</li>
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="form-actions" style="margin-top:20px">
+    <a href="{{ url_for('settings') }}" class="btn btn--secondary">Back to Settings</a>
+    {% if last and last[1] != 'ok' %}
+    <form method="post" action="{{ url_for('send_test') }}" style="display:inline">
+      <button type="submit" class="btn btn--primary">Try Again</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

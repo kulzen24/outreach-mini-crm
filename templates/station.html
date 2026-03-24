@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}{{ station.station_name }} — Radio Outreach{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <a href="{{ url_for('index') }}" class="back-link">← Back to Checklist</a>
+  <div class="page-header-right">
+    <span class="badge badge--{{ station.status }} badge--lg">{{ station.status }}</span>
+    {% if station.sent_at %}
+      <span class="sent-at-label">Sent {{ station.sent_at }}</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="detail-grid">
+
+  <!-- Left: Station info + edit form -->
+  <section class="card">
+    <h2 class="card-title">Station Info</h2>
+    <form method="post" action="{{ url_for('station_edit', row_id=station.row_id) }}">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Station Name</label>
+          <input type="text" name="station_name" value="{{ station.station_name }}" class="input">
+        </div>
+        <div class="form-group">
+          <label>Contact / Music Director</label>
+          <input type="text" name="contact_name" value="{{ station.contact_name }}" class="input">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" name="email" value="{{ station.email }}" class="input">
+        </div>
+        <div class="form-group">
+          <label>School</label>
+          <input type="text" name="school" value="{{ station.school }}" class="input">
+        </div>
+        <div class="form-group">
+          <label>City</label>
+          <input type="text" name="city" value="{{ station.city }}" class="input">
+        </div>
+        <div class="form-group">
+          <label>State</label>
+          <input type="text" name="state" value="{{ station.state }}" class="input">
+        </div>
+        <div class="form-group">
+          <label>Genre / Format</label>
+          <input type="text" name="genre" value="{{ station.genre }}" class="input">
+        </div>
+        <div class="form-group form-group--full">
+          <label>Notes</label>
+          <textarea name="notes" rows="3" class="input">{{ station.notes }}</textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn--secondary">Save Changes</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Right: Email preview + send -->
+  <section class="card">
+    <h2 class="card-title">Email Preview</h2>
+
+    <div class="email-preview">
+      <div class="email-field">
+        <span class="email-field-label">To:</span>
+        <span>{{ station.email or '(no email on file)' }}</span>
+      </div>
+      <div class="email-field">
+        <span class="email-field-label">Subject:</span>
+        <span>{{ subject }}</span>
+      </div>
+      <div class="email-body quill-preview">{{ body | safe }}</div>
+    </div>
+
+    <div class="form-actions">
+      {% if not authorized %}
+        <a href="{{ url_for('settings') }}" class="btn btn--secondary">Connect Google Account first</a>
+      {% elif station.email %}
+        {% if station.status != 'sent' %}
+        <form method="post" action="{{ url_for('send_one', row_id=station.row_id) }}">
+          <input type="hidden" name="next" value="{{ request.url }}">
+          <button type="submit" class="btn btn--primary">✉ Send Email</button>
+        </form>
+        {% else %}
+        <form method="post" action="{{ url_for('send_one', row_id=station.row_id) }}"
+              onsubmit="return confirm('This email was already sent. Send again?')">
+          <input type="hidden" name="next" value="{{ request.url }}">
+          <button type="submit" class="btn btn--secondary">✉ Re-send Email</button>
+        </form>
+        {% endif %}
+      {% else %}
+        <p class="warning-text">No email address — add one above before sending.</p>
+      {% endif %}
+
+      <a href="{{ url_for('settings') }}" class="btn btn--ghost">Edit Template</a>
+    </div>
+
+    <!-- Status controls -->
+    <div class="status-controls">
+      {% if station.status != 'skipped' %}
+      <form method="post" action="{{ url_for('set_status', row_id=station.row_id) }}" style="display:inline">
+        <input type="hidden" name="status" value="skipped">
+        <input type="hidden" name="next" value="{{ request.url }}">
+        <button type="submit" class="btn btn--ghost btn--sm">Mark as Skipped</button>
+      </form>
+      {% endif %}
+      {% if station.status != 'pending' %}
+      <form method="post" action="{{ url_for('set_status', row_id=station.row_id) }}" style="display:inline">
+        <input type="hidden" name="status" value="pending">
+        <input type="hidden" name="next" value="{{ request.url }}">
+        <button type="submit" class="btn btn--ghost btn--sm">Reset to Pending</button>
+      </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('delete_one', row_id=station.row_id) }}" style="display:inline"
+            onsubmit="return confirm('Remove {{ station.station_name }} from the list?')">
+        <button type="submit" class="btn btn--danger btn--sm">Delete</button>
+      </form>
+    </div>
+  </section>
+
+</div>
+{% endblock %}
