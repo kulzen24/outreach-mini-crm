@@ -1,3 +1,6 @@
+# Source data — keep local only
+*.pdf
+
 # Secrets & credentials — never commit these
 .env
 token.json
