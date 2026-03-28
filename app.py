@@ -44,7 +44,8 @@ from spreadsheet import (
 )
 from parse_pdf import extract_stations, get_pdf_columns
 from email_sender import send_email, preview_email, is_authorized, credentials_file_exists, SCOPES, TOKEN_FILE, CREDENTIALS_FILE
-from models_config import get_all_settings, save_all_settings, get_column_map
+from models_config import (get_all_settings, save_all_settings, get_column_map,
+                           get_templates, save_template, get_template, delete_template)
 from config import PDF_PATH, XLSX_PATH
 
 app = Flask(__name__)
@@ -182,7 +183,9 @@ def station_detail(row_id):
         return redirect(url_for("index"))
     subject, body = preview_email(station)
     authorized = is_authorized()
-    return render_template("station.html", station=station, subject=subject, body=body, authorized=authorized)
+    templates = get_templates()
+    return render_template("station.html", station=station, subject=subject, body=body,
+                           authorized=authorized, templates=templates)
 
 
 @app.route("/station/<row_id>/edit", methods=["POST"])
@@ -203,6 +206,38 @@ def station_edit(row_id):
 
 
 # ---------------------------------------------------------------------------
+# Email preview (JSON — used by the send modal)
+# ---------------------------------------------------------------------------
+
+@app.route("/preview/<row_id>")
+def preview_station(row_id):
+    station = get_station(row_id)
+    if not station:
+        return jsonify({"error": "Station not found"}), 404
+
+    template_id  = request.args.get("template_id", "").strip()
+    subject_tpl  = body_tpl = None
+    if template_id:
+        tpl = get_template(template_id)
+        if tpl:
+            subject_tpl = tpl["subject"]
+            body_tpl    = tpl["body"]
+
+    subject, body = preview_email(station, subject_tpl=subject_tpl, body_tpl=body_tpl)
+
+    return jsonify({
+        "row_id":       row_id,
+        "station_name": station.get("station_name", ""),
+        "to_email":     station.get("email", ""),
+        "subject":      subject,
+        "body":         body,
+        "status":       station.get("status", ""),
+        "templates":    [{"id": t["id"], "name": t["name"]} for t in get_templates()],
+        "template_id":  template_id,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Sending
 # ---------------------------------------------------------------------------
 
@@ -213,7 +248,15 @@ def send_one(row_id):
         flash("Station not found.", "error")
         return redirect(url_for("index"))
 
-    success, error = send_email(station)
+    subject_tpl = body_tpl = None
+    template_id = request.form.get("template_id", "").strip()
+    if template_id:
+        tpl = get_template(template_id)
+        if tpl:
+            subject_tpl = tpl["subject"]
+            body_tpl    = tpl["body"]
+
+    success, error = send_email(station, subject_tpl=subject_tpl, body_tpl=body_tpl)
     if success:
         mark_sent(row_id)
         flash(f"Email sent to {station['email']}.", "success")
@@ -282,9 +325,11 @@ def settings():
         return redirect(url_for("settings"))
 
     all_settings = get_all_settings()
-    authorized = is_authorized()
-    creds_exist = credentials_file_exists()
-    return render_template("settings.html", s=all_settings, authorized=authorized, creds_exist=creds_exist)
+    authorized   = is_authorized()
+    creds_exist  = credentials_file_exists()
+    templates    = get_templates()
+    return render_template("settings.html", s=all_settings, authorized=authorized,
+                           creds_exist=creds_exist, templates=templates)
 
 
 @app.route("/columns")
@@ -392,6 +437,43 @@ def disconnect():
     if os.path.exists(TOKEN_FILE):
         os.remove(TOKEN_FILE)
     flash("Google account disconnected.", "success")
+    return redirect(url_for("settings"))
+
+
+# ---------------------------------------------------------------------------
+# Named templates
+# ---------------------------------------------------------------------------
+
+@app.route("/templates/save", methods=["POST"])
+def templates_save():
+    name       = request.form.get("tpl_name", "").strip()
+    subject    = request.form.get("tpl_subject", "").strip()
+    body       = request.form.get("tpl_body", "").strip()
+    overwrite  = request.form.get("tpl_overwrite", "").strip()
+    if not name:
+        flash("Please enter a name for the template.", "warning")
+        return redirect(url_for("settings"))
+    if overwrite:
+        delete_template(overwrite)
+    save_template(name, subject, body)
+    flash(f'Template "{name}" saved.', "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/templates/load/<template_id>")
+def templates_load(template_id):
+    tpl = get_template(template_id)
+    if not tpl:
+        return {"error": "not found"}, 404
+    return {"subject": tpl["subject"], "body": tpl["body"]}
+
+
+@app.route("/templates/delete/<template_id>", methods=["POST"])
+def templates_delete(template_id):
+    tpl = get_template(template_id)
+    if tpl:
+        delete_template(template_id)
+        flash(f'Template "{tpl["name"]}" deleted.', "success")
     return redirect(url_for("settings"))
 
 

@@ -102,6 +102,9 @@
             <button class="ql-list" value="bullet"></button>
           </span>
           <span class="ql-formats">
+            <button class="ql-image" title="Insert image"></button>
+          </span>
+          <span class="ql-formats">
             <button class="ql-clean"></button>
           </span>
           <!-- Merge tag buttons inside toolbar -->
@@ -136,12 +139,22 @@
 
     <div class="form-actions">
       <button type="submit" class="btn btn--primary">Save Template</button>
+      <button type="button" class="btn btn--ghost" onclick="toggleSaveAs()">Save as Template…</button>
       <button type="button" class="btn btn--ghost" onclick="submitTestEmail()">✉ Send Test Email</button>
       <span class="test-recipient-wrap">
         <span class="test-recipient-label">to:</span>
         <input type="email" id="test_recipient_input" class="input input--inline"
                placeholder="your@email.com (leave blank = your Gmail)">
       </span>
+    </div>
+
+    <!-- Inline "save as template" row (hidden until toggled) -->
+    <div id="save-as-row" class="save-as-row hidden">
+      <label class="save-as-label">Template name:</label>
+      <input type="text" id="tpl_name_input" class="input input--inline"
+             placeholder="e.g. Hip Hop Outreach v1" style="width:260px">
+      <button type="button" class="btn btn--primary btn--sm" onclick="submitSaveAsTemplate()">Save</button>
+      <button type="button" class="btn btn--ghost  btn--sm" onclick="toggleSaveAs()">Cancel</button>
     </div>
   </section>
 
@@ -188,6 +201,50 @@
   <input type="hidden" name="email_body_test" id="email_body_test">
   <input type="hidden" name="test_recipient" id="test_recipient">
 </form>
+
+<!-- Save-as-template form (outside main form) -->
+<form method="post" action="{{ url_for('templates_save') }}" id="save-as-form">
+  <input type="hidden" name="tpl_name"      id="tpl_name_hidden">
+  <input type="hidden" name="tpl_subject"   id="tpl_subject_hidden">
+  <input type="hidden" name="tpl_body"      id="tpl_body_hidden">
+  <input type="hidden" name="tpl_overwrite" id="tpl_overwrite_hidden">
+</form>
+
+<!-- ── Saved Templates ───────────────────────────────────────── -->
+{% if templates %}
+<section class="card" id="saved-templates">
+  <h2 class="card-title">Saved Templates</h2>
+  <p class="card-hint">Click <strong>Load</strong> to copy a template into the editor above.</p>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Subject</th>
+        <th>Saved</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tpl in templates %}
+      <tr id="tpl-row-{{ tpl.id }}">
+        <td><strong>{{ tpl.name }}</strong></td>
+        <td class="tpl-subject-cell">{{ tpl.subject }}</td>
+        <td class="tpl-date-cell">{{ tpl.created_at }}</td>
+        <td class="tpl-actions-cell">
+          <button type="button" class="btn btn--ghost btn--sm"
+                  onclick="loadTemplate('{{ tpl.id }}')">Load</button>
+          <form method="post" action="{{ url_for('templates_delete', template_id=tpl.id) }}"
+                style="display:inline"
+                onsubmit="return confirm('Are you sure you want to delete the template \u201c{{ tpl.name }}\u201d? This cannot be undone.')">
+            <button type="submit" class="btn btn--ghost btn--sm btn--danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
 
 <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 <script>
@@ -245,7 +302,34 @@ const savedBody = {{ s.email_body | tojson }};
 
 const quill = new Quill('#quill-editor', {
   theme: 'snow',
-  modules: { toolbar: '#quill-toolbar' },
+  modules: {
+    toolbar: {
+      container: '#quill-toolbar',
+      handlers: {
+        image: function () {
+          const input = document.createElement('input');
+          input.setAttribute('type', 'file');
+          input.setAttribute('accept', 'image/png, image/jpeg, image/gif, image/webp');
+          input.click();
+          input.onchange = function () {
+            const file = input.files[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) {
+              alert('Image must be under 5 MB.');
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = function (e) {
+              const range = quill.getSelection(true);
+              quill.insertEmbed(range ? range.index : quill.getLength(), 'image', e.target.result);
+              updatePreview();
+            };
+            reader.readAsDataURL(file);
+          };
+        }
+      }
+    }
+  },
   placeholder: 'Write your email here…',
 });
 
@@ -338,6 +422,58 @@ function submitTestEmail() {
   document.getElementById('test_recipient').value =
     document.getElementById('test_recipient_input').value.trim();
   document.getElementById('send-test-form').submit();
+}
+
+// ── Save as Template ─────────────────────────────────────────
+function toggleSaveAs() {
+  const row = document.getElementById('save-as-row');
+  row.classList.toggle('hidden');
+  if (!row.classList.contains('hidden')) {
+    document.getElementById('tpl_name_input').focus();
+  }
+}
+
+// All saved templates — used for duplicate name check
+const SAVED_TEMPLATES = {{ templates | tojson }};
+
+function submitSaveAsTemplate() {
+  const name = document.getElementById('tpl_name_input').value.trim();
+  if (!name) { alert('Please enter a template name.'); return; }
+
+  // Check for duplicate name
+  const existing = SAVED_TEMPLATES.find(
+    t => t.name.toLowerCase() === name.toLowerCase()
+  );
+  if (existing) {
+    const ok = confirm(
+      `A template named "${existing.name}" already exists.\n\nOverwrite it?`
+    );
+    if (!ok) return;
+    // Pass the id of the template to overwrite
+    document.getElementById('tpl_overwrite_hidden').value = existing.id;
+  } else {
+    document.getElementById('tpl_overwrite_hidden').value = '';
+  }
+
+  document.getElementById('tpl_name_hidden').value    = name;
+  document.getElementById('tpl_subject_hidden').value = document.getElementById('email_subject').value;
+  document.getElementById('tpl_body_hidden').value    = quill.root.innerHTML;
+  document.getElementById('save-as-form').submit();
+}
+
+// ── Load a saved template into the editor ────────────────────
+function loadTemplate(id) {
+  fetch('/templates/load/' + id)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { alert('Template not found.'); return; }
+      document.getElementById('email_subject').value = data.subject;
+      quill.root.innerHTML = data.body;
+      updatePreview();
+      // Scroll up so the user sees the editor
+      document.getElementById('template-form').scrollIntoView({ behavior: 'smooth' });
+    })
+    .catch(() => alert('Could not load template.'));
 }
 </script>
 

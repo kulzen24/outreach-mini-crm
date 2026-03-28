@@ -31,5 +31,147 @@
   {% block content %}{% endblock %}
 </main>
 
+<!-- ── Email Preview Modal ─────────────────────────────────────── -->
+<div id="preview-modal" class="modal-overlay" aria-modal="true" role="dialog" aria-labelledby="preview-modal-title" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h3 class="modal-title" id="preview-modal-title">Email Preview</h3>
+        <p class="modal-subtitle" id="preview-station-name"></p>
+      </div>
+      <button class="modal-close" onclick="closePreviewModal()" aria-label="Close">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <div id="preview-loading" class="modal-loading">Loading preview&hellip;</div>
+      <div id="preview-content" style="display:none">
+        <div id="template-selector-wrap" class="template-selector-row" style="display:none">
+          <label class="form-group" style="flex-direction:row;align-items:center;gap:10px;margin:0">
+            <span style="font-size:12.5px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap">Template</span>
+            <select id="preview-template-select" class="input" style="margin:0"></select>
+          </label>
+        </div>
+        <div class="email-preview">
+          <div class="email-field">
+            <span class="email-field-label">To:</span>
+            <span id="preview-to"></span>
+          </div>
+          <div class="email-field">
+            <span class="email-field-label">Subject:</span>
+            <span id="preview-subject"></span>
+          </div>
+          <div class="email-body quill-preview" id="preview-body"></div>
+        </div>
+      </div>
+      <div id="preview-error" class="alert alert--error" style="display:none"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn--ghost" onclick="closePreviewModal()">Cancel</button>
+      <form id="preview-send-form" method="post" style="margin:0">
+        <input type="hidden" name="next" id="preview-next" value="">
+        <input type="hidden" name="template_id" id="preview-template-id" value="">
+        <button type="submit" id="preview-send-btn" class="btn btn--primary" disabled>&#9993; Send Email</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const modal          = document.getElementById('preview-modal');
+  const loading        = document.getElementById('preview-loading');
+  const content        = document.getElementById('preview-content');
+  const errorBox       = document.getElementById('preview-error');
+  const sendForm       = document.getElementById('preview-send-form');
+  const sendBtn        = document.getElementById('preview-send-btn');
+  const stationLabel   = document.getElementById('preview-station-name');
+  const toField        = document.getElementById('preview-to');
+  const subjectField   = document.getElementById('preview-subject');
+  const bodyField      = document.getElementById('preview-body');
+  const nextInput      = document.getElementById('preview-next');
+  const templateWrap   = document.getElementById('template-selector-wrap');
+  const templateSelect = document.getElementById('preview-template-select');
+  const templateIdInput = document.getElementById('preview-template-id');
+
+  let _rowId = null;
+
+  function _loadPreview(templateId) {
+    loading.style.display  = 'block';
+    content.style.display  = 'none';
+    errorBox.style.display = 'none';
+
+    const qs = templateId ? '?template_id=' + encodeURIComponent(templateId) : '';
+    fetch('/preview/' + _rowId + qs)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { throw new Error(data.error); }
+
+        stationLabel.textContent = data.station_name || '';
+        toField.textContent      = data.to_email     || '(no email on file)';
+        subjectField.textContent = data.subject      || '(no subject)';
+        bodyField.innerHTML      = data.body         || '';
+        sendBtn.disabled         = !data.to_email;
+        templateIdInput.value    = templateId || '';
+
+        // Populate template dropdown on first load only; subsequent calls just
+        // update subject/body, so the selection isn't reset on every fetch.
+        if (data.templates !== undefined) {
+          templateSelect.innerHTML = '<option value="">Current (from Settings)</option>';
+          data.templates.forEach(function (t) {
+            const opt = document.createElement('option');
+            opt.value = t.id;
+            opt.textContent = t.name;
+            templateSelect.appendChild(opt);
+          });
+          templateSelect.value = templateId || '';
+          templateWrap.style.display = data.templates.length ? 'block' : 'none';
+        }
+
+        loading.style.display = 'none';
+        content.style.display = 'block';
+      })
+      .catch(function (err) {
+        loading.style.display  = 'none';
+        errorBox.textContent   = 'Could not load preview: ' + err.message;
+        errorBox.style.display = 'block';
+      });
+  }
+
+  templateSelect.addEventListener('change', function () {
+    templateIdInput.value = this.value;
+    _loadPreview(this.value);
+  });
+
+  window.openPreviewModal = function (rowId, nextUrl) {
+    _rowId = rowId;
+    sendForm.action              = '/send/' + rowId;
+    nextInput.value              = nextUrl || window.location.href;
+    templateSelect.innerHTML     = '<option value="">Current (from Settings)</option>';
+    templateSelect.value         = '';
+    templateIdInput.value        = '';
+    templateWrap.style.display   = 'none';
+    sendBtn.disabled             = true;
+    stationLabel.textContent     = '';
+    modal.style.display          = 'flex';
+    document.body.style.overflow = 'hidden';
+    _loadPreview('');
+  };
+
+  window.closePreviewModal = function () {
+    modal.style.display          = 'none';
+    document.body.style.overflow = '';
+  };
+
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) { closePreviewModal(); }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.style.display !== 'none') { closePreviewModal(); }
+  });
+}());
+</script>
+
 </body>
 </html>

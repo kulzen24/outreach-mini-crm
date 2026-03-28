@@ -100,12 +100,12 @@
           <a href="{{ url_for('station_detail', row_id=s.row_id) }}" class="link-name">{{ s.station_name or '—' }}</a>
         </td>
         <td>{{ s.contact_name or '—' }}</td>
-        <td class="td-email">
+        <td class="td-email" title="{{ s.email }}">
           {% if s.email %}
             <a href="mailto:{{ s.email }}" class="email-link">{{ s.email }}</a>
           {% else %}—{% endif %}
         </td>
-        <td>{{ s.school or '—' }}</td>
+        <td class="td-school" title="{{ s.school }}">{{ s.school or '—' }}</td>
         <td class="td-location">{{ [s.city, s.state] | select | join(', ') or '—' }}</td>
         <td>{{ s.genre or '—' }}</td>
         <td>
@@ -114,12 +114,10 @@
         <td class="td-sent-at">{{ s.sent_at or '—' }}</td>
         <td class="col-actions">
           <div class="action-group">
-            <!-- Send / re-send -->
+            <!-- Preview & send -->
             {% if s.status != 'sent' and s.email %}
-            <form method="post" action="{{ url_for('send_one', row_id=s.row_id) }}">
-              <input type="hidden" name="next" value="{{ request.url }}">
-              <button type="submit" class="btn btn--primary btn--xs" title="Send email">✉</button>
-            </form>
+            <button type="button" class="btn btn--primary btn--xs" title="Preview &amp; send email"
+                    onclick="openPreviewModal('{{ s.row_id }}', '{{ request.url }}')">&#9993;</button>
             {% endif %}
 
             <!-- Skip / un-skip -->

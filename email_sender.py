@@ -12,8 +12,10 @@ Supported merge tags (in subject or body):
 import os
 import re
 import base64
+import uuid
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -160,25 +162,68 @@ def _normalize_html(html_body):
     return html_body
 
 
+def _extract_inline_images(html):
+    """
+    Find base64 data-URI images in HTML, replace each with a cid: reference,
+    and return (modified_html, [(cid, subtype, raw_bytes), ...]).
+    """
+    images = []
+
+    def replacer(match):
+        data_uri  = match.group(1)
+        header, data = data_uri.split(",", 1)
+        mime_type = header.split(":")[1].split(";")[0]   # e.g. image/png
+        subtype   = mime_type.split("/")[1]               # e.g. png
+        raw       = base64.b64decode(data)
+        cid       = str(uuid.uuid4())
+        images.append((cid, subtype, raw))
+        return f'src="cid:{cid}"'
+
+    modified = re.sub(r'src="(data:image/[^;]+;base64,[^"]+)"', replacer, html)
+    return modified, images
+
+
 def _build_raw_message(sender, to, subject, html_body):
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"]    = sender
-    msg["To"]      = to
-    msg.attach(MIMEText(_html_to_plain(html_body), "plain", "utf-8"))
+    plain  = _html_to_plain(html_body)
     styled = _normalize_html(html_body)
     full_html = (
         "<html><body style=\"font-family:Arial,sans-serif;font-size:14px;color:#111;\">"
         f"{styled}</body></html>"
     )
-    msg.attach(MIMEText(full_html, "html", "utf-8"))
+
+    # Pull out any embedded images and replace with cid: references
+    full_html, images = _extract_inline_images(full_html)
+
+    # Build the alternative part (plain + html)
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(plain, "plain", "utf-8"))
+    alt.attach(MIMEText(full_html, "html", "utf-8"))
+
+    if images:
+        # Wrap in multipart/related so cid: images are resolved correctly
+        msg = MIMEMultipart("related")
+        msg.attach(alt)
+        for i, (cid, subtype, raw) in enumerate(images, start=1):
+            filename = f"image-{i}.{subtype}"
+            img = MIMEImage(raw, _subtype=subtype)
+            img.add_header("Content-ID", f"<{cid}>")
+            img.add_header("Content-Disposition", "inline", filename=filename)
+            msg.attach(img)
+    else:
+        msg = alt
+
+    msg["Subject"] = subject
+    msg["From"]    = sender
+    msg["To"]      = to
+
     raw = base64.urlsafe_b64encode(msg.as_string().encode("utf-8")).decode("utf-8")
     return {"raw": raw}
 
 
-def send_email(station):
+def send_email(station, subject_tpl=None, body_tpl=None):
     """
     Send an outreach email for one station dict.
+    Optionally pass subject_tpl / body_tpl to override the active settings template.
     Returns (success: bool, error_message: str | None).
     """
     service = get_gmail_service()
@@ -189,8 +234,8 @@ def send_email(station):
     if not to_address:
         return False, f"No email address for {station.get('station_name', 'this station')}."
 
-    subject_tpl = get_setting("email_subject")
-    body_tpl    = get_setting("email_body")
+    subject_tpl = subject_tpl or get_setting("email_subject")
+    body_tpl    = body_tpl    or get_setting("email_body")
     # Strip HTML tags to check if the body has actual visible content
     plain_check = re.sub(r"<[^>]+>", "", body_tpl or "").strip()
     if not subject_tpl or not plain_check:
@@ -215,8 +260,9 @@ def send_email(station):
         return False, str(exc)
 
 
-def preview_email(station):
-    """Return (subject, body) with merge tags filled in. No email is sent."""
-    subject_tpl = get_setting("email_subject")
-    body_tpl    = get_setting("email_body")
+def preview_email(station, subject_tpl=None, body_tpl=None):
+    """Return (subject, body) with merge tags filled in. No email is sent.
+    Optionally pass subject_tpl / body_tpl to preview a specific template."""
+    subject_tpl = subject_tpl or get_setting("email_subject")
+    body_tpl    = body_tpl    or get_setting("email_body")
     return _render(subject_tpl or "", station), _render(body_tpl or "", station)

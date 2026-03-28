@@ -2,12 +2,17 @@
 models_config.py
 Persists app settings (email credentials, templates, column map) in
 settings.json so the user never has to touch code or env files directly.
+
+Named templates are stored separately in templates.json.
 """
 
 import json
 import os
+import uuid
+from datetime import datetime
 
-SETTINGS_PATH = os.path.join(os.path.dirname(__file__), "settings.json")
+SETTINGS_PATH   = os.path.join(os.path.dirname(__file__), "settings.json")
+TEMPLATES_PATH  = os.path.join(os.path.dirname(__file__), "templates.json")
 
 DEFAULTS = {
     "email_subject": "Music Submission — {{station}}",
@@ -22,16 +27,17 @@ DEFAULTS = {
         "[YOUR EMAIL / PHONE]"
     ),
     # column map: app field → PDF column header
-    "col_station_name": "",
-    "col_contact_name": "",   # full name (used if first/last not mapped separately)
-    "col_first_name":   "",   # optional — first name column
-    "col_last_name":    "",   # optional — last name column
-    "col_email":        "",
-    "col_school":       "",
-    "col_city":         "",
-    "col_state":        "",
-    "col_genre":        "",
-    "col_notes":        "",
+    # Defaults match the College Radio Directory Bundle PDF.
+    "col_station_name": "Station",
+    "col_contact_name": "DJ / Music Dir.",
+    "col_first_name":   "",          # optional — first name column
+    "col_last_name":    "",          # optional — last name column
+    "col_email":        "Email",
+    "col_school":       "School",
+    "col_city":         "State/City",  # auto-split into state + city on import
+    "col_state":        "",            # populated from State/City automatically
+    "col_genre":        "",            # no genre column in this PDF
+    "col_notes":        "Notes",
 }
 
 
@@ -72,18 +78,75 @@ def save_all_settings(form_data):
     _save(data)
 
 
+# ---------------------------------------------------------------------------
+# Named template library
+# ---------------------------------------------------------------------------
+
+def _load_templates():
+    if os.path.exists(TEMPLATES_PATH):
+        with open(TEMPLATES_PATH) as f:
+            return json.load(f)
+    return []
+
+
+def _save_templates(templates):
+    with open(TEMPLATES_PATH, "w") as f:
+        json.dump(templates, f, indent=2)
+
+
+def get_templates():
+    """Return all saved templates, newest first."""
+    return sorted(_load_templates(), key=lambda t: t.get("created_at", ""), reverse=True)
+
+
+def save_template(name, subject, body):
+    """Save a new named template. Returns the new template dict."""
+    templates = _load_templates()
+    tpl = {
+        "id":         str(uuid.uuid4()),
+        "name":       name.strip(),
+        "subject":    subject,
+        "body":       body,
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    templates.append(tpl)
+    _save_templates(templates)
+    return tpl
+
+
+def get_template(template_id):
+    """Return a single template by id, or None."""
+    return next((t for t in _load_templates() if t["id"] == template_id), None)
+
+
+def delete_template(template_id):
+    templates = [t for t in _load_templates() if t["id"] != template_id]
+    _save_templates(templates)
+
+
 def get_column_map():
-    """Return the current PDF→app column mapping as a dict."""
+    """Return the current PDF→app column mapping as a dict.
+
+    Falls back to DEFAULTS when a key is absent *or* saved as an empty string,
+    so the correct defaults work even if settings.json pre-dates them.
+    """
     data = _load()
+
+    def _get(col_key):
+        saved = data.get(col_key)
+        if saved is not None and str(saved).strip():
+            return str(saved).strip()
+        return DEFAULTS.get(col_key, "")
+
     return {
-        "station_name": data.get("col_station_name", ""),
-        "contact_name": data.get("col_contact_name", ""),
-        "first_name":   data.get("col_first_name", ""),
-        "last_name":    data.get("col_last_name", ""),
-        "email":        data.get("col_email", ""),
-        "school":       data.get("col_school", ""),
-        "city":         data.get("col_city", ""),
-        "state":        data.get("col_state", ""),
-        "genre":        data.get("col_genre", ""),
-        "notes":        data.get("col_notes", ""),
+        "station_name": _get("col_station_name"),
+        "contact_name": _get("col_contact_name"),
+        "first_name":   _get("col_first_name"),
+        "last_name":    _get("col_last_name"),
+        "email":        _get("col_email"),
+        "school":       _get("col_school"),
+        "city":         _get("col_city"),
+        "state":        _get("col_state"),
+        "genre":        _get("col_genre"),
+        "notes":        _get("col_notes"),
     }

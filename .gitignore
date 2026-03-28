@@ -9,6 +9,7 @@ settings.json
 
 # Generated data
 outreach.xlsx
+templates.json
 
 # Python
 venv/

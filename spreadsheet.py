@@ -110,8 +110,12 @@ def _ws(wb):
 def _row_to_dict(ws, row_idx):
     d = {}
     for col_idx, key in enumerate(COLUMNS, start=1):
-        cell = ws.cell(row=row_idx, column=col_idx)
-        d[key] = cell.value if cell.value is not None else ""
+        val = ws.cell(row=row_idx, column=col_idx).value
+        val = "" if val is None else str(val)
+        # Treat bare dash placeholders as empty (common in the source PDF).
+        if val.strip() in ("-", "—"):
+            val = ""
+        d[key] = val
     return d
 
 

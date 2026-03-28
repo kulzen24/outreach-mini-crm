@@ -22,7 +22,7 @@ a:hover { text-decoration: underline; }
   box-shadow: 0 2px 8px rgba(0,0,0,.18);
 }
 .nav-inner {
-  max-width: 1300px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 0 24px;
   display: flex;
@@ -36,7 +36,7 @@ a:hover { text-decoration: underline; }
 .nav-links a:hover, .nav-links a.active { color: #fff; text-decoration: none; }
 
 /* ── Container ────────────────────────────────────────────────── */
-.container { max-width: 1300px; margin: 0 auto; padding: 28px 24px 60px; }
+.container { max-width: 1600px; margin: 0 auto; padding: 28px 24px 60px; }
 
 /* ── Alerts ───────────────────────────────────────────────────── */
 .alert {
@@ -166,8 +166,10 @@ a:hover { text-decoration: underline; }
 .row--sent    td { background: rgba(198,239,206,.35); }
 .row--skipped td { background: rgba(255,235,156,.35); }
 
-.td-name    { font-weight: 600; min-width: 160px; }
-.td-email   { font-size: 13px; color: #2563eb; }
+.td-name    { font-weight: 600; min-width: 140px; }
+.td-email   { font-size: 13px; color: #2563eb; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-email a { display: block; overflow: hidden; text-overflow: ellipsis; }
+.td-school  { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-location { white-space: nowrap; }
 .td-sent-at  { font-size: 12px; color: #6b7280; white-space: nowrap; }
 
@@ -175,7 +177,21 @@ a:hover { text-decoration: underline; }
 .link-name:hover { text-decoration: underline; }
 .email-link { color: #2563eb; }
 
-.col-actions { width: 1%; white-space: nowrap; }
+/* Sticky Actions column — always visible at the right edge */
+.col-actions {
+  position: sticky;
+  right: 0;
+  width: 1%;
+  white-space: nowrap;
+  background: #fff;
+  box-shadow: -3px 0 8px rgba(0,0,0,.06);
+  z-index: 1;
+}
+th.col-actions { background: #1F3864; box-shadow: -3px 0 8px rgba(0,0,0,.18); }
+.row--sent    td.col-actions { background: #ebf9ee; }
+.row--skipped td.col-actions { background: #fff8db; }
+.table tbody tr:hover td.col-actions { background: #f9fafb; }
+
 .action-group { display: flex; gap: 4px; align-items: center; }
 
 /* ── Badges ───────────────────────────────────────────────────── */
@@ -312,6 +328,76 @@ textarea.input { resize: vertical; }
 
 .inline-link { color: #2563eb; text-decoration: underline; }
 .warning-text { color: #d97706; font-size: 13px; font-weight: 500; }
+
+/* ── Preview modal ────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.22);
+  max-width: 680px;
+  width: 100%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modal-in .15s ease;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  gap: 12px;
+}
+.modal-title    { font-size: 15px; font-weight: 700; color: #111827; }
+.modal-subtitle { font-size: 12.5px; color: #6b7280; margin-top: 2px; }
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  transition: color .1s;
+}
+.modal-close:hover { color: #111; }
+.modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-loading {
+  color: #6b7280;
+  font-size: 13.5px;
+  padding: 24px 0;
+  text-align: center;
+}
+.template-selector-row { margin-bottom: 14px; }
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+}
 
 /* ── Debug send page ──────────────────────────────────────────── */
 .debug-step {
@@ -458,3 +544,25 @@ textarea.input { resize: vertical; }
 .quill-preview p  { margin: 0 0 0.6em; }
 .quill-preview ul, .quill-preview ol { padding-left: 1.4em; margin: 0 0 0.6em; }
 .quill-preview a  { color: #2563eb; text-decoration: underline; }
+
+/* ── Save as Template inline row ─────────────────────────────── */
+.save-as-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+}
+.save-as-row.hidden { display: none; }
+.save-as-label { font-size: 13px; font-weight: 600; color: #166534; white-space: nowrap; }
+
+/* ── Saved Templates table ───────────────────────────────────── */
+.tpl-subject-cell { color: #4b5563; font-size: 13px; max-width: 260px;
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tpl-date-cell    { color: #9ca3af; font-size: 12px; white-space: nowrap; }
+.tpl-actions-cell { white-space: nowrap; }
+.btn--danger      { color: #dc2626 !important; border-color: #fca5a5 !important; }
+.btn--danger:hover { background: #fef2f2 !important; }
